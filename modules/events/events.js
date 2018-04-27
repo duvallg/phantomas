@@ -11,7 +11,7 @@ exports.module = function(phantomas) {
 	phantomas.setMetric('eventsDispatched'); // @desc number of EventTarget.dispatchEvent calls
 	phantomas.setMetric('eventsScrollBound'); // @desc number of scroll event bounds
 
-	phantomas.once('init', function() {
+	phantomas.on('init', function() {
 		phantomas.evaluate(function() {
 			(function(phantomas) {
 				// spy calls to EventTarget.addEventListener
@@ -25,7 +25,7 @@ exports.module = function(phantomas) {
 					phantomas.addOffender('eventsBound', '"%s" bound to "%s"', eventType, path);
 
 					// count window.addEventListener('scroll', ...) - issue #508
-					if (eventType === 'scroll' && path === 'window') {
+					if (eventType === 'scroll' && (path === 'window' || path === '#document')) {
 						phantomas.incrMetric('eventsScrollBound');
 						phantomas.addOffender('eventsScrollBound', 'bound by %s', phantomas.getBacktrace());
 					}

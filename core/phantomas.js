@@ -20,10 +20,16 @@ if (!Function.prototype.bind) {
 	};
 }
 
+function getAverage(arr) {
+	var sum = arr.reduce(function(a, b) {
+		return a + b;
+	});
+	return sum / arr.length;
+}
+
 // exit codes
 var EXIT_SUCCESS = 0,
 	EXIT_TIMED_OUT = 252,
-	EXIT_CONFIG_FAILED = 253,
 	EXIT_LOAD_FAILED = 254,
 	EXIT_ERROR = 255;
 
@@ -108,6 +114,8 @@ var phantomas = function(params) {
 
 	this.results.setGenerator('phantomas v' + this.getVersion());
 	this.results.setUrl(this.url);
+
+	this.metricsAvgStorage = {};
 
 	// allow asserts to be provided via command-line options (#128)
 	Object.keys(this.params).forEach(function(param) {
@@ -239,6 +247,7 @@ phantomas.prototype = {
 			setMetricEvaluate: this.setMetricEvaluate.bind(this),
 			setMarkerMetric: this.setMarkerMetric.bind(this),
 			incrMetric: this.incrMetric.bind(this),
+			addToAvgMetric: this.addToAvgMetric.bind(this),
 			getMetric: this.getMetric.bind(this),
 
 			// offenders
@@ -382,14 +391,37 @@ phantomas.prototype = {
 
 		this.start = Date.now();
 
+		var self = this;
+
 		// setup viewport / --viewport=1366x768
 		var parsedViewport = this.getParam('viewport', '1366x768', 'string').split('x');
 
 		if (parsedViewport.length === 2) {
-			this.page.viewportSize = {
-				width: parseInt(parsedViewport[0], 10) || 1280,
-				height: parseInt(parsedViewport[1], 10) || 1024
+			var viewportSize = {
+				width: parseInt(parsedViewport[0], 10) || 1366,
+				height: parseInt(parsedViewport[1], 10) || 768
 			};
+
+			this.page.viewportSize = viewportSize;
+
+			this.on('init', function() {
+				self.page.evaluate(function(viewportSize) {
+					try {
+						window.screen = {
+							width: viewportSize.width,
+							height: viewportSize.height,
+							availWidth: viewportSize.width,
+							availHeight: viewportSize.height,
+							availLeft: 0,
+							availTop: 0,
+							colorDepth: 24,
+							pixelDepth: 24
+						};
+					} catch (ex) {
+						// SlimmerJS complains: "Error: setting a property that has only a getter"
+					}
+				}, viewportSize);
+			});
 		}
 
 		// setup user agent /  --user-agent=custom-agent
@@ -405,6 +437,11 @@ phantomas.prototype = {
 		this.log('Opening <%s>...', this.url);
 		this.log('Using %s as user agent', this.page.settings.userAgent);
 		this.log('Viewport set to %d x %d', this.page.viewportSize.width, this.page.viewportSize.height);
+
+		if (typeof phantom !== 'undefined') {
+			this.log('phantom.version: %j', phantom.version);
+			this.log('phantom user agent: %s', phantom.defaultPageSettings.userAgent);
+		}
 
 		// bind basic events
 		this.page.onInitialized = this.proxy(this.onInitialized);
@@ -423,41 +460,56 @@ phantomas.prototype = {
 
 		this.initLoadingProgress();
 
-		// observe HTTP requests
-		// finish when the last request is completed + one second timeout
-		var self = this;
+		// do not wait for any requests, stop immediately after onload event (issue #513)
+		if (this.getParam('stop-at-onload', false) === true) {
+			this.log('stop-at-onload: --stop-at-onload passed, will stop immediately after onload event');
+		} else {
+			// observe HTTP requests
+			// finish when the last request is completed + one second timeout
+			this.reportQueue.push(function(done) {
+				var currentRequests = 0,
+					requestsUrls = {},
+					onFinished = function(entry) {
+						currentRequests--;
+						delete requestsUrls[entry.url];
 
-		this.reportQueue.push(function(done) {
-			var currentRequests = 0,
-				requestsUrls = {},
-				onFinished = function(entry) {
-					currentRequests--;
-					delete requestsUrls[entry.url];
+						if (currentRequests < 1) {
+							timeoutId = setTimeout(function() {
+								done();
+							}, 1000);
+						}
+					},
+					timeoutId;
 
-					if (currentRequests < 1) {
-						timeoutId = setTimeout(function() {
-							done();
-						}, 1000);
-					}
-				},
-				timeoutId;
+				// update HTTP requests counter
+				self.on('send', function(entry) {
+					clearTimeout(timeoutId);
 
-			// update HTTP requests counter
-			self.on('send', function(entry) {
-				clearTimeout(timeoutId);
+					currentRequests++;
+					requestsUrls[entry.url] = true;
+				});
 
-				currentRequests++;
-				requestsUrls[entry.url] = true;
+				self.on('recv', onFinished);
+				self.on('abort', onFinished);
+
+				// add debug info about pending responses (issue #216)
+				self.on('timeout', function() {
+					var timedOutRequests = Object.keys(requestsUrls);
+
+					self.log('Timeout: gave up waiting for %d HTTP response(s): <%s>', currentRequests, timedOutRequests.join('>, <'));
+
+					// emit timed out requests as a fake metric (#539)
+					self.results.setMetric('requestsWithTimeout', timedOutRequests.length);
+
+					timedOutRequests.forEach(function(url) {
+						self.results.addOffender('requestsWithTimeout', url);
+					});
+				});
+
+				// always register the metric (issue #581)
+				self.results.setMetric('requestsWithTimeout', 0);
 			});
-
-			self.on('recv', onFinished);
-			self.on('abort', onFinished);
-
-			// add debug info about pending responses (issue #216)
-			self.on('timeout', function() {
-				self.log('Timeout: gave up waiting for %d HTTP response(s): <%s>', currentRequests, Object.keys(requestsUrls).join('>, <'));
-			});
-		});
+		}
 
 		this.reportQueue.push(function(done) {
 			self.on('loadFinished', done);
@@ -488,6 +540,11 @@ phantomas.prototype = {
 
 	// called when all HTTP requests are completed
 	report: function() {
+		// restote the native JSON.parse (just in case, see #482)
+		this.page.evaluate(function() {
+			JSON.parse = window.__phantomas && window.__phantomas.JSON.parse;
+		});
+
 		this.emitInternal('report'); // @desc the report is about to be generated
 
 		var time = Date.now() - this.start;
@@ -547,12 +604,21 @@ phantomas.prototype = {
 			return;
 		}
 
+		var currentUrl = this.page.url;
+
 		// prevent multiple triggers in PhantomJS
-		if (this.initTriggered) {
-			this.log('onInit: was already triggered');
+		// but only on the same page (issue #550)
+		if (this.initTriggered === currentUrl) {
+			this.log('onInit: was already triggered for <%s>', currentUrl);
 			return;
 		}
-		this.initTriggered = true;
+		this.initTriggered = currentUrl;
+
+		// Another multiple triggers case in PhantomJS (issue #606)
+		if (this.page.url === 'about:blank') {
+			this.log('onInit: webpage.url is about:blank, ignoring');
+			return;
+		}
 
 		// add helper tools into window.__phantomas "namespace"
 		if (!this.page.injectJs(this.dir + 'core/scope.js')) {
@@ -678,6 +744,10 @@ phantomas.prototype = {
 				this.incrMetric(data.name, data.incr);
 				break;
 
+			case 'addToAvgMetric':
+				this.addToAvgMetric(data.name, data.value);
+				break;
+
 			case 'setMarkerMetric':
 				this.setMarkerMetric(data.name);
 				break;
@@ -734,6 +804,17 @@ phantomas.prototype = {
 		this.setMetric(name, currVal + (typeof incr === 'number' ? incr : 1));
 	},
 
+	// push a value and update the metric if the current average value
+	addToAvgMetric: function(name, value) {
+		if (typeof this.metricsAvgStorage[name] === 'undefined') {
+			this.metricsAvgStorage[name] = [];
+		}
+
+		this.metricsAvgStorage[name].push(value);
+
+		this.setMetric(name, getAverage(this.metricsAvgStorage[name]));
+	},
+
 	getMetric: function(name) {
 		return this.results.getMetric(name);
 	},
@@ -770,6 +851,8 @@ phantomas.prototype = {
 	// tries to parse it's output (assumes JSON formatted output)
 	runScript: function(script, args, callback) {
 		var execFile = require("child_process").execFile,
+			fs = require('fs'),
+			osName = require('system').os.name, // linux / windows
 			start = Date.now(),
 			self = this;
 
@@ -780,7 +863,19 @@ phantomas.prototype = {
 		// execFile(file, args, options, callback)
 		// @see https://github.com/ariya/phantomjs/wiki/API-Reference-ChildProcess
 		args = args || [];
-		script = this.dir + script;
+
+		// handle relative paths to binaries (issue #672)
+		if (!fs.isAbsolute(script)) {
+			script = this.dir + script;
+		}
+
+		// Windows fix: escape '&' (#587) and ')' (#687)
+		// @see http://superuser.com/questions/550048/is-there-an-escape-for-character-in-the-command-prompt
+		if (osName === 'windows') {
+			args = args.map(function(arg) {
+				return arg.replace(/[&)]/g, '^^^$&'); // $& - Inserts the matched substring
+			});
+		}
 
 		// always wait for runScript to finish (issue #417)
 		this.reportQueue.push(function(done) {
@@ -788,9 +883,16 @@ phantomas.prototype = {
 
 			ctx = execFile(script, args, null, function(err, stdout, stderr) {
 				var time = Date.now() - start;
+				var result = stderr !== "" ? stderr : stdout;
 
 				if (err || stderr) {
-					self.log('runScript: pid #%d failed - %s (took %d ms)!', pid, (err || stderr || 'unknown error').trim(), time);
+					var errMessage = (err || stderr || 'unknown error').trim();
+					self.log('runScript: pid #%d failed - %s (took %d ms)!', pid, errMessage, time);
+
+					callback(errMessage, result);
+
+					done();
+					return;
 				} else if (!pid) {
 					self.log('runScript: failed running %s %s!', script, args.join(' '));
 
@@ -802,11 +904,13 @@ phantomas.prototype = {
 
 				// (try to) parse JSON-encoded output
 				try {
-					callback(null, JSON.parse(stdout));
+					result = JSON.parse(stdout);
 				} catch (ex) {
-					self.log('runScript: JSON parsing failed!');
-					callback(stderr, stdout);
+					self.log('runScript: JSON parsing failed! - %s', ex);
+					err = ex;
 				}
+
+				callback(err, result);
 
 				done();
 			});

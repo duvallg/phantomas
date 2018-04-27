@@ -11,7 +11,6 @@
  * setMetric('cssColors') @desc number of unique colors used in CSS @optional @offenders
  * setMetric('cssComments') @desc number of comments in CSS source @optional @offenders
  * setMetric('cssCommentsLength') @desc length of comments content in CSS source @optional
- * setMetric('cssComplexSelectors') @desc number of complex selectors (consisting of more than three expressions, e.g. header ul li .foo) @optional @offenders
  * setMetric('cssComplexSelectorsByAttribute') @desc  [number] number of selectors with complex matching by attribute (e.g. [class$="foo"]) @optional @offenders
  * setMetric('cssDuplicatedSelectors') @desc number of CSS selectors defined more than once in CSS source @optional @offenders
  * setMetric('cssDuplicatedProperties') @desc number of CSS property definitions duplicated within a selector @optional @offenders
@@ -24,27 +23,28 @@
  * setMetric('cssMultiClassesSelectors') @desc number of selectors with multiple classes (e.g. span.foo.bar) @optional @offenders
  * setMetric('cssOldPropertyPrefixes') @desc number of properties with no longer needed vendor prefix, powered by data provided by autoprefixer (e.g. --moz-border-radius) @optional @offenders
  * setMetric('cssQualifiedSelectors') @desc number of qualified selectors (e.g. header#nav, .foo#bar, h1.title) @optional @offenders
- * setMetric('cssSpecificityIdAvg') @desc average specificity for ID @optional
+ * setMetric('cssSpecificityIdAvg') @desc average specificity for ID @optional @offenders
  * setMetric('cssSpecificityIdTotal') @desc total specificity for ID @optional
- * setMetric('cssSpecificityClassAvg') @desc average specificity for class, pseudo-class or attribute @optional
+ * setMetric('cssSpecificityClassAvg') @desc average specificity for class, pseudo-class or attribute @optional @offenders
  * setMetric('cssSpecificityClassTotal') @desc total specificity for class, pseudo-class or attribute @optional
- * setMetric('cssSpecificityTagAvg') @desc average specificity for element @optional
+ * setMetric('cssSpecificityTagAvg') @desc average specificity for element @optional @offenders
  * setMetric('cssSpecificityTagTotal') @desc total specificity for element @optional
- * setMetric('cssSelectorsByAttribute') @desc number of selectors by attribute (e.g. .foo[value=bar]) @optional
+ * setMetric('cssSelectorsByAttribute') @desc [number] number of selectors by attribute (e.g. .foo[value=bar]) @optional
  * setMetric('cssSelectorsByClass') @desc number of selectors by class @optional
  * setMetric('cssSelectorsById') @desc number of selectors by ID @optional
  * setMetric('cssSelectorsByPseudo') @desc number of pseudo-selectors (e,g. :hover) @optional
  * setMetric('cssSelectorsByTag') @desc number of selectors by tag name @optional
- * setMetric('cssUniversalSelectors') @desc number of selectors trying to match every element (e.g. .foo > *) @optional @offenders
- * setMetric('cssLength') @desc length of CSS source (in bytes) @optional
- * setMetric('cssRules') @desc number of rules (e.g. .foo, .bar { color: red } is counted as one rule) @optional
- * setMetric('cssSelectors') @desc number of selectors (e.g. .foo, .bar { color: red } is counted as two selectors - .foo and .bar) @optional
- * setMetric('cssDeclarations') @desc number of declarations (e.g. .foo, .bar { color: red } is counted as one declaration - color: red) @optional
+ * setMetric('cssLength') @desc length of CSS source (in bytes) @optional @offenders
+ * setMetric('cssRules') @desc number of rules (e.g. .foo, .bar { color: red } is counted as one rule) @optional @offenders
+ * setMetric('cssSelectors') @desc number of selectors (e.g. .foo, .bar { color: red } is counted as two selectors - .foo and .bar) @optional @offenders
+ * setMetric('cssDeclarations') @desc number of declarations (e.g. .foo, .bar { color: red } is counted as one declaration - color: red) @optional @offenders
+ * setMetric('cssNotMinified') @desc [number] set to 1 if the provided CSS is not minified @optional @offenders
+ * setMetric('cssSelectorLengthAvg') @desc [number] average length of selector (e.g. for ``.foo .bar, #test div > span { color: red }`` will be set as 2.5) @optional @offenders
  */
 /* global document: true, window: true */
 'use strict';
 
-exports.version = '0.4';
+exports.version = '0.6';
 
 exports.module = function(phantomas) {
 	if (!phantomas.getParam('analyze-css')) {
@@ -69,24 +69,49 @@ exports.module = function(phantomas) {
 
 	// run analyze-css "binary" installed by npm
 	function analyzeCss(options) {
-		var isWindows = (require('system').os.name === 'windows'),
-			binary = isWindows ? 'analyze-css.cmd' : 'analyze-css';
+		var system = require('system'),
+			isWindows = (system.os.name === 'windows'),
+			binary = system.env.ANALYZE_CSS_BIN,
+			proxy;
 
 		// force JSON output format
 		options.push('--json');
 
-		phantomas.runScript('node_modules/.bin/' + binary, options, function(err, results) {
+		// set basic auth if needed
+		if (phantomas.getParam('auth-user') && phantomas.getParam('auth-pass')) {
+			options.push('--auth-user', phantomas.getParam('auth-user'));
+			options.push('--auth-pass', phantomas.getParam('auth-pass'));
+		}
+
+		// HTTP proxy (#500)
+		proxy = phantomas.getParam('proxy', false, 'string');
+
+		if (proxy !== false) {
+			if (proxy.indexOf('http:') < 0) {
+				proxy = 'http://' + proxy; // http-proxy-agent (used by analyze-css) expects a protocol as well
+			}
+
+			options.push('--proxy', proxy);
+		}
+
+		phantomas.runScript(binary, options, function(err, results) {
 			var offenderSrc = (options[0] === '--url') ? '<' + options[1] + '>' : '[inline CSS]';
 
 			if (err !== null) {
-				phantomas.log('analyzeCss: sub-process failed!');
+				phantomas.log('analyzeCss: sub-process failed! - %s', err);
 
 				// report failed CSS parsing (issue #494(
 				var offender = offenderSrc;
-				if (err.indexOf('CSS parsing failed') > 0) {
-					offender += ' (' + err.trim() + ')';
-				} else if (err.indexOf('Empty CSS was provided') > 0) {
-					offender += ' (Empty CSS was provided)';
+				if (err.message) { // Error object returned
+					if (err.message.indexOf('Unable to parse JSON string') > 0) {
+						offender += ' (analyzeCss output error)';
+					}
+				} else { // Error string returned (stderror)
+					if (err.indexOf('CSS parsing failed') > 0 || err.indexOf('is an invalid expression') > 0) {
+						offender += ' (' + err.trim() + ')';
+					} else if (err.indexOf('Empty CSS was provided') > 0) {
+						offender += ' (Empty CSS was provided)';
+					}
 				}
 
 				phantomas.incrMetric('cssParsingErrors');
@@ -102,8 +127,13 @@ exports.module = function(phantomas) {
 			Object.keys(metrics).forEach(function(metric) {
 				var metricPrefixed = 'css' + ucfirst(metric);
 
-				// increase metrics
-				phantomas.incrMetric(metricPrefixed, metrics[metric]);
+				if (/Avg$/.test(metricPrefixed)) {
+					// update the average value (see #641)
+					phantomas.addToAvgMetric(metricPrefixed, metrics[metric]);
+				} else {
+					// increase metrics
+					phantomas.incrMetric(metricPrefixed, metrics[metric]);
+				}
 
 				// and add offenders
 				if (typeof offenders[metric] !== 'undefined') {
@@ -115,9 +145,29 @@ exports.module = function(phantomas) {
 						if (re.test(msg)) {
 							msg = msg.replace(re, ' ' + offenderSrc + '$&');
 						}
+						// add file url in offenders for cssDuplicatedSelectors (issue #693)
+						else if (metricPrefixed === 'cssDuplicatedSelectors') {
+							msg += ' ' + offenderSrc;
+						}
 
 						phantomas.addOffender(metricPrefixed, msg);
 					});
+				}
+				// add more offenders (#578)
+				else {
+					switch (metricPrefixed) {
+						case 'cssLength':
+						case 'cssRules':
+						case 'cssSelectors':
+						case 'cssDeclarations':
+						case 'cssNotMinified':
+						case 'cssSelectorLengthAvg':
+						case 'cssSpecificityIdAvg':
+						case 'cssSpecificityClassAvg':
+						case 'cssSpecificityTagAvg':
+							phantomas.addOffender(metricPrefixed, offenderSrc + ': ' + metrics[metric]);
+							break;
+					}
 				}
 			});
 		});
@@ -139,10 +189,17 @@ exports.module = function(phantomas) {
 				phantomas.spyEnabled(false, 'looking for inline styles');
 
 				var styles = document.getElementsByTagName('style'),
-					content = [];
+					content = [],
+					type;
 
 				for (var i = 0, len = styles.length; i < len; i++) {
-					content.push(styles[i].textContent);
+					type = styles[i].getAttribute('type') || 'text/css'; // ignore inline <style> tags with type different than text/css (issue #694)
+
+					if (type === 'text/css') {
+						content.push(styles[i].textContent);
+					} else {
+						phantomas.log('analyzeCss: inline <style> tag found with type="%s", ignoring...', type);
+					}
 				}
 
 				phantomas.spyEnabled(true);

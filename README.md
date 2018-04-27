@@ -1,30 +1,35 @@
-phantomas
+phantomas [![npm](https://img.shields.io/npm/dt/phantomas.svg)]() [![Build Status](https://api.travis-ci.org/macbre/phantomas.png?branch=devel)](http://travis-ci.org/macbre/phantomas) [![Known Vulnerabilities](https://snyk.io/test/github/macbre/phantomas/badge.svg)](https://snyk.io/test/github/macbre/phantomas)
 =========
-
-![GitHub Logo](http://upload.wikimedia.org/wikipedia/en/a/a5/Fantomas.jpg)
 
 PhantomJS-based modular web performance metrics collector. And why phantomas? Well, [because](http://en.wikipedia.org/wiki/Fantômas) :)
 
-[![NPM version](https://badge.fury.io/js/phantomas.png)](http://badge.fury.io/js/phantomas)
-[![Build Status](https://api.travis-ci.org/macbre/phantomas.png?branch=devel)](http://travis-ci.org/macbre/phantomas)
-
-[![Download stats](https://nodei.co/npm/phantomas.png?downloads=true&downloadRank=true)](https://nodei.co/npm/phantomas/)
-
-
 ## Requirements
 
-* [NodeJS](http://nodejs.org)
-* [PhantomJS 1.9+](http://phantomjs.org/)
+* [NodeJS](http://nodejs.org) 4+
+* [NPM](https://www.npmjs.com/) 3+
 
 ## Installation
 
 ```
-npm install --global phantomas
+npm install --global --no-optional phantomas phantomjs-prebuilt@macbre/phantomjs2-npm#v2.5.0-dev
 ```
 
-> This will install the latest version of PhantomJS and add a symlink called ``phantomas`` (pointing to ``./bin/phantomas.js``) to your system's ``PATH``
+> This will install [the latest version of PhantomJS](https://github.com/macbre/phantomjs-static-2.5/releases/tag/v2.5-beta) and add a symlink called ``phantomas`` (pointing to ``./bin/phantomas.js``) to your system's ``PATH``
 
-You may need to install libfontconfig by running ``sudo apt-get install libfontconfig1``.
+You may need to install libfontconfig and libjpeg8 by running ``sudo apt-get install libfontconfig1 libjpeg8``.
+
+### Development version
+
+To get the latest development version of phantomas (and install all required dependencies):
+
+```
+git clone git@github.com:macbre/phantomas.git
+npm install
+```
+
+## Having problems?
+
+Please refer to **[/Troubleshooting.md](https://github.com/macbre/phantomas/blob/devel/Troubleshooting.md)**
 
 ## Libraries
 
@@ -54,21 +59,19 @@ pip install phantomas
 
 ## Contributors
 
+> All the [contributors](https://github.com/macbre/phantomas/graphs/contributors)
+
 * [macbre](https://github.com/macbre)
-* [jmervine](https://github.com/jmervine)
-* [jmosney](https://github.com/jmosney)
-* [umaar](https://github.com/umaar)
 * [sjhcockrell](https://github.com/sjhcockrell)
-* [cphoover](https://github.com/cphoover)
-* [LaurentGoderre](https://github.com/LaurentGoderre)
-* [kennydee](https://github.com/kennydee)
-* [iNem0o](https://github.com/iNem0o)
-* [stefanjudis](https://github.com/stefanjudis)
-* [vgangan](https://github.com/vgangan)
+* [jgonera](https://github.com/jgonera)
 * [william-p](https://github.com/william-p)
-* [cvan](https://github.com/cvan)
+* [gmetais](https://github.com/gmetais)
+* [vgangan](https://github.com/vgangan)
+* [cphoover](https://github.com/cphoover)
+* [wladekb](https://github.com/wladekb)
+* [iNem0o](https://github.com/iNem0o)
 * [gomezd](https://github.com/gomezd)
-* All the [contributors](https://github.com/macbre/phantomas/graphs/contributors)
+* [stefanjudis](https://github.com/stefanjudis)
 
 ## Usage
 
@@ -86,15 +89,28 @@ You can measure the performance of your site without requests to 3rd party domai
 phantomas https://github.com/macbre/phantomas --verbose --no-externals --allow-domain .fastly.net
 ```
 
+You can provide phantomas config via JSON or YAML file. We [support environment variables in YAML config files](https://github.com/macbre/phantomas/issues/685) ([the way Docker does](https://docs.docker.com/compose/environment-variables/)].
+
+```
+./bin/phantomas.js --config examples/config.yaml
+URL='https://www.google.is' ./bin/phantomas.js --config examples/config.yaml
+```
+
+An example config file with customizable test URL for various environments (production, staging, sandboxes, ...):
+
+```yaml
+url: "https://${ENV:-prod}.super-fast-app.io"
+```
+
 #### Parameters
 
-* `--reporter=[json|csv|tap|plain|statsd|elasticsearch]` results reporter aka format (``plain`` is the default one)
+* `--reporter=[json|csv|tap|plain|statsd|elasticsearch|cloudwatch]` results reporter aka format (``plain`` is the default one)
 * `--timeout=[seconds]` timeout for phantomas run (defaults to 15 seconds)
-* `--viewport=[width]x[height]` phantomJS viewport dimensions (1280x1024 is the default)
+* `--viewport=[width]x[height]` phantomJS viewport dimensions (1366x768 is the default)
 * `--verbose` writes debug messages to the console
 * `--debug` run PhantomJS in debug mode
-* `--engine` select engine used to run the phantomas ``[webkit|gecko]`` **experimental**
-* `--colors` forces ANSI colors even when output is piped (eg. via ``less -r``)
+* `--engine` select engine used to run the phantomas ``[webkit|gecko]``
+* `--colors` forces ANSI colors even when output is piped (e,g. via ``less -r``)
 * `--silent` don't write anything to the console
 * `--progress` shows page loading progress bar (disables verbose mode)
 * `--log=[log file]` log to a given file
@@ -103,7 +119,7 @@ phantomas https://github.com/macbre/phantomas --verbose --no-externals --allow-d
 * `--skip-modules=[moduleOne],[moduleTwo]` skip selected modules
 * `--user-agent='Custom user agent'` provide a custom user agent (will default to something similar to ``phantomas/0.6.0 (PhantomJS/1.9.0; linux 64bit)``)
 * `--config=[JSON/YAML config file]` uses JSON or YAML-formatted config file to set parameters
-* `--cookie='bar=foo;domain=url'` document.cookie formatted string for setting a single cookie
+* `--cookie='bar=foo;domain=url'` document.cookie formatted string for setting a single cookie (separate multiple cookies using a pipe, e.g. `--cookie='foo=42;path=/foo|test=123'`)
 * `--cookies-file=[JAR file]` specifies the file name to store the persistent Cookies
 * `--no-externals` block requests to 3rd party domains
 * `--allow-domain=[domain],[domain]` allow requests to given domain(s) - aka whitelist
@@ -115,6 +131,7 @@ phantomas https://github.com/macbre/phantomas --verbose --no-externals --allow-d
 * `--film-strip` register film strip when page is loading **experimental**
 * `--film-strip-dir=[dir path]` folder path to output film strip (default is ``./filmstrip`` directory)
 * `--film-strip-prefix` film strip files name prefix (defaults to ``screenshot``)
+* `--film-strip-zoom-factor` film strip zoom factor (defaults to ``0.5``)
 * `--page-source` save page source to file **experimental**
 * `--page-source-dir=[dir path]` folder path to output page source (default is ``./html`` directory) **experimental**
 * `--assert-[metric-name]=value` assert that given metric should be less or equal the value
@@ -122,6 +139,7 @@ phantomas https://github.com/macbre/phantomas --verbose --no-externals --allow-d
 * `--har=[file name]` save HAR to a given file
 * `--wait-for-event=[phantomas event name]` wait for a given phantomas event before generating a report, timeout setting still applies (e.g. ``--wait-for-event "done"``)
 * `--wait-for-selector=[CSS selector]` wait for an element matching given CSS selector before generating a report, timeout setting still applies (e.g. ``--wait-for-selector "body.loaded"``)
+* `--stop-at-onload` stop phantomas **immediately after `onload` event**
 * `--scroll` scroll down the page when it''s loaded
 * `--post-load-delay=[seconds]` wait X seconds before generating a report, timeout setting still applies
 * `--ignore-ssl-errors` ignores SSL errors, such as expired or self-signed certificate errors
@@ -145,7 +163,7 @@ Only ``plain`` (the default one) and ``json`` reporters are currently supported 
 
 ## Metrics
 
-_Current number of metrics: 129_
+_Current number of metrics: 136_
 
 Units:
 
@@ -234,7 +252,6 @@ Units:
 * globalVariablesFalsy: number of JS global variables that cast to false
 * bodyHTMLSize: the size of body tag content (``document.body.innerHTML.length``)
 * commentsSize: the size of HTML comments on the page
-* hiddenContentSize: the size of content of hidden elements on the page (with CSS ``display: none``)
 * whiteSpacesSize: the size of text nodes with whitespaces only
 * DOMelementsCount: total number of HTML element nodes
 * DOMelementMaxDepth: maximum level on nesting of HTML element node
@@ -243,6 +260,11 @@ Units:
 * nodesWithInlineCSS: number of nodes with inline CSS styling (with `style` attribute)
 * imagesScaledDown: number of <img> nodes that have images scaled down in HTML
 * imagesWithoutDimensions: number of ``<img>`` nodes without both ``width`` and ``height`` attribute
+
+### DOM hidden content
+
+* hiddenContentSize: the size of content of hidden elements on the page (with CSS ``display: none``)
+* hiddenImages: number of hidden images that can be lazy-loaded
 
 ### DOM queries
 
@@ -268,7 +290,7 @@ Units:
 
 * eventsBound: number of ``EventTarget.addEventListener`` calls
 * eventsDispatched: number of ``EventTarget.dispatchEvent`` calls
-* eventsScrollBound: number of `scroll` event bounds to `window`
+* eventsScrollBound: number of `scroll` event bounds to `window` or `document`
 
 ### Window performance
 
@@ -306,8 +328,12 @@ Units:
 
 ### Requests to
 
+* requestsToFirstPaint: number of HTTP requests it took to make the first paint
+* domainsToFirstPaint: number of domains used to make the first paint
 * requestsToDomContentLoaded: number of HTTP requests it took to make the page reach `DomContentLoaded` state
+* domainsToDomContentLoaded: number of domains used to make the page reach DomContentLoaded state
 * requestsToDomComplete: number of HTTP requests it took to make the page reach `DomComplete` state
+* domainsToDomComplete: number of domains used to make the page reach DomComplete state
 
 ### keepAlive
 
@@ -349,6 +375,7 @@ Units:
 * cachingTooShort: responses with too short (less than a week) caching time
 * cachingDisabled: responses with caching disabled (`max-age=0`)
 * oldCachingHeaders: responses with old, HTTP 1.0 caching headers (``Expires`` and ``Pragma``)
+* cachingUseImmutable: responses with a long TTL that can benefit from [`Cache-Control: immutable`](https://hacks.mozilla.org/2017/01/using-immutable-caching-to-speed-up-the-web/)
 
 ### Time to first asset
 
@@ -389,6 +416,10 @@ Units:
 
 * [documentHeight](http://www.stevesouders.com/blog/2014/06/08/http-archive-new-stuff/): the page height in pixels
 
+### Lazy-loadable images
+
+* lazyLoadableImagesBelowTheFold: number of images displayed below the fold that can be lazy-loaded
+
 ### Optional metrics
 
 > The following metrics are emitted only when certain options are passed to phantomas
@@ -426,9 +457,6 @@ This will omit CSV headers row and add current timestamp as the first column, so
 * ``timestamp`` - add the current timestamp as the first column
 * ``url`` - add the URL as the first column
 
-##### Elasticsearch
-* ``<host>:<port>:<index>:<type>`` - shorthand for ``--elasticsearch-*`` options
-
 ##### JSON
 * ``pretty`` - emits pretty printed JSON
 
@@ -440,6 +468,9 @@ This will omit CSV headers row and add current timestamp as the first column, so
 
 ##### TAP
 * ``no-skip`` - don't print out metrics that were skipped
+
+##### StatsD
+* ``<host>:<port>:<prefix>`` - shorthand for ``--statsd-host``, ``--statsd-port`` and ``--statsd-prefix`` (you don't need to provide all three options)
 
 #### StatsD integration
 
@@ -457,32 +488,29 @@ $ phantomas http://app.net/start -R statsd:stats.app.net:8125:myApp.mainPage.
 
 will sent metrics to StatsD running on ``stats.app.net:8125`` and prefix them with 'myApp.mainPage'.
 
-#### Save metrics to Elasticsearch
+### 3rd-party reporters
 
-Metrics from phantomas run can be outputted directly in Elasticsearch :
+> These need to be installed on demand as 3rd party npm packages
 
-##### Parameters
-
-* `--elasticsearch-host=[ip]` Elasticsearch instance ip (default : 127.0.0.1)
-* `--elasticsearch-port=[port]` Elasticsearch instance port (default : 9200)
-* `--elasticsearch-index=[index_name]` Name of the index to use
-* `--elasticsearch-type=[type_name]` Name of the document type to use
-
-Or by using reporter options (``<host>:<port>:<index>:<type>``):
-
-```
-$ phantomas http://app.net/start -R elasticsearch:es.app.net::app:phantomas_metrics
-```
-
-Note: as ``<port>`` option was skipped a default value will be used (``9200``).
+* [AWS CloudWatch](https://github.com/EFF/phantomas-reporter-cloudwatch)
+* [elasticsearch](https://github.com/macbre/phantomas-reporter-elasticsearch)
 
 ## Engines
 
-phantomas can be run using PhantomJS (WebKit-powered headless browser) or SlimerJS (Gecko-based non headless browser, run using xfvb). Use either ``--engine=[webkit|gecko]`` or ``--webkit`` / ``--gecko`` parameters to choose one. Please note that **support for SlimerJS is experimental at this point**.
+phantomas can be run using [PhantomJS 2.1.x](https://github.com/macbre/phantomas/issues/488) (WebKit-powered headless browser) or [SlimerJS](https://slimerjs.org/) (Gecko-based non headless browser, run using [`xfvb`](http://www.x.org/releases/X11R7.6/doc/man/man1/Xvfb.1.xhtml)).
+
+**PhantomJS 2.1.x is a default engine**.
+
+You can choose the engine by using either:
+
+* cli option: ``--engine=[webkit|gecko]`` or ``--webkit`` / ``--gecko``
+* `PHANTOMAS_ENGINE` environmental variable: e.g. `PHANTOMAS_ENGINE=gecko`
+
+> Please note that **support for SlimerJS is experimental at this point**.
 
 ### PhantomJS
 
-All required binaries are installed by npm. No extra work needed here :)
+All required binaries have already been installed by npm. No extra work needed here :)
 
 ### SlimerJS
 
@@ -490,6 +518,12 @@ In order to use SlimerJS install the following Debian/Ubuntu packages:
 
 ```
 sudo aptitude install xvfb libasound2 libgtk2.0-0
+```
+
+You will also need to install the module:
+
+```bash
+npm install --global slimerjs@^0.906.1
 ```
 
 ## For developers

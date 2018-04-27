@@ -1,6 +1,6 @@
 {
   "name": "phantomas",
-  "version": "1.10.0",
+  "version": "1.20.0",
   "author": "macbre <maciej.brencz@gmail.com> (http://macbre.net)",
   "description": "PhantomJS-based web performance metrics collector",
   "main": "./lib/index.js",
@@ -17,45 +17,46 @@
     "web development",
     "webperf"
   ],
-  "license": "BSD",
+  "license": "BSD-2-Clause",
   "engines": {
-    "node": ">=0.10"
+    "node": ">=4.0"
   },
   "dependencies": {
-    "analyze-css": "0.9.x",
+    "analyze-css": "^0.12.5",
     "ansicolors": "~0.3.2",
     "ansistyles": "~0.1.0",
-    "ascii-table": "0.0.8",
-    "async": "~0.9.0",
-    "csv-string": "~2.2.2",
-    "debug": "~2.1.0",
-    "elasticsearch": "~3.0.0",
-    "js-yaml": "^3.1.0",
+    "ascii-table": "0.0.9",
+    "async": "^2.4.0",
+    "csv-string": "^2.3.2",
+    "debug": "^2.6.8",
+    "js-yaml": "^3.8.4",
     "node-statsd": "0.1.1",
-    "node-uuid": "~1.4.1",
-    "optimist": "0.6.x",
-    "phantomjs": "^1.9.15",
-    "progress": "~1.1.4",
-    "q": "~1.1.2",
-    "slimerjs": "^0.9.5",
-    "tap": "0.5.0",
-    "tap-eater": ">=0.0.1",
-    "travis-fold": ">=0.1.2"
+    "optimist": "^0.6.1",
+    "optimist-config-file": "^1.0.1",
+    "progress": "~2.0.0",
+    "q": "^1.5.0",
+    "tap-producer-macbre": "0.0.3",
+    "travis-fold": ">=0.1.2",
+    "uuid": "^3.0.1"
   },
   "devDependencies": {
-    "glob": "^4.3.1",
-    "http-server": "^0.7.2",
-    "js-beautify": "^1.5.4",
-    "jshint": "^2.5.10",
-    "mockery": "^1.4.0",
+    "glob": "^7.1.2",
+    "http-server": "^0.10.0",
+    "js-beautify": "^1.6.14",
+    "jshint": "^2.9.4",
+    "mockery": "^2.0.0",
     "vows": "^0.7.0"
   },
-  "optionalDependencies": {},
+  "optionalDependencies": {
+    "phantomjs-prebuilt": "macbre/phantomjs2-npm#v2.5.0-dev",
+    "slimerjs": "^0.10.3"
+  },
   "bin": "./bin/phantomas.js",
   "preferGlobal": true,
   "scripts": {
-    "test": "vows --spec",
-    "lint": "jshint --verbose core/ modules/ scripts/ test/*.js test/*/*-test.js lib/*.js lib/metadata/*.js reporters/",
+    "test": "PHANTOMAS_ENGINE=webkit vows --spec",
+    "unit-test": "vows test/modules/*-test.js --spec",
+    "lint": "jshint --verbose core/ modules/ scripts/ test/*.js test/*/*-test.js lib/*.js lib/metadata/*.js reporters/ examples/",
     "beautify": "js-beautify -r bin/phantomas.js core/*.js examples/*.js extensions/*/*.js lib/*.js lib/engines/*.js lib/metadata/*.js modules/*/*.js reporters/*.js scripts/*.js test/*.js test/*/*.js",
     "metadata": "DEBUG=* node lib/metadata/generate.js"
   },

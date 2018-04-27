@@ -33,8 +33,12 @@ exports.module = function(phantomas) {
 		}
 
 		// match whitelist (--allow-domain)
-		if (allowedDomainsRegExp && allowedDomainsRegExp.test(domain)) {
-			blocked = false;
+		if (allowedDomainsRegExp) {
+			if (allowedDomainsRegExp.test(domain) || domain === ourDomain) {
+				blocked = false;
+			} else {
+				blocked = true;
+			}
 		}
 
 		return blocked;
@@ -66,10 +70,12 @@ exports.module = function(phantomas) {
 		blockedDomainsRegExp = new RegExp('(' + blockedDomains.join('|') + ')$');
 	}
 
-	// get the "main" domain from the first request not being a redirect (issue #197)
-	phantomas.on('responseEnd', function(entry, res) {
-		ourDomain = entry.domain;
-		phantomas.log('Block domains: assuming "%s" to be the main domain', ourDomain);
+	// get the "main" domain from the first request (see issues #197 and #535)
+	phantomas.on('beforeSend', function(entry) {
+		if (!ourDomain) {
+			ourDomain = entry.domain;
+			phantomas.log('Block domains: assuming "%s" to be the main domain (from the first request sent)', ourDomain);
+		}
 	});
 
 	// check each request before sending

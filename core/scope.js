@@ -9,6 +9,12 @@
 	// create a scope
 	var phantomas = (scope.__phantomas = scope.__phantomas || {});
 
+	// keep the original JSON functions (#482)
+	phantomas.JSON = {
+		parse: JSON.parse,
+		stringify: JSON.stringify
+	};
+
 	// NodeRunner
 	var nodeRunner = function() {
 		// "Beep, Beep"
@@ -105,10 +111,6 @@
 			} catch (e) {}
 		};
 
-		// now "freeze" the console object (issue #230)
-		// @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
-		Object.freeze(console);
-
 		function sendMsg(type, data) {
 			// @see https://github.com/ariya/phantomjs/wiki/API-Reference-WebPage#oncallback
 			// Stability: EXPERIMENTAL - see issue #62
@@ -119,6 +121,10 @@
 			**/
 
 			try {
+				// Prototype 1.6 (and Mootools 1.2 too) creates an Array.prototype.toJSON - issue #482
+				// @see http://stackoverflow.com/questions/710586/json-stringify-array-bizarreness-with-prototype-js
+				Array.prototype.toJSON = undefined;
+
 				origConsoleLog.call(console, 'msg:' + stringify({
 					type: type || false,
 					data: data || false
@@ -147,6 +153,13 @@
 			});
 		}
 
+		function addToAvgMetric(name, value) {
+			sendMsg('addToAvgMetric', {
+				name: name,
+				value: value
+			});
+		}
+
 		function setMarkerMetric(name) {
 			sendMsg('setMarkerMetric', {
 				name: name
@@ -165,6 +178,7 @@
 		phantomas.log = log;
 		phantomas.setMetric = setMetric;
 		phantomas.incrMetric = incrMetric;
+		phantomas.addToAvgMetric = addToAvgMetric;
 		phantomas.setMarkerMetric = setMarkerMetric;
 		phantomas.addOffender = addOffender;
 		phantomas.emit = emit;
@@ -238,7 +252,7 @@
 			});
 
 			window.__defineGetter__(varName, function() {
-				return spiedGlobals[varName];
+				return spiedGlobals[varName] || undefined;
 			});
 
 		}
@@ -286,7 +300,7 @@
 			}
 			// div[0] <- index of child node
 			else if (node.parentNode instanceof Node) {
-				entry += '[' + Math.max(0, Array.prototype.indexOf.call(node.parentNode.children, node)) + ']';
+				entry += '[' + Math.max(0, Array.prototype.indexOf.call(node.parentNode.children || node.parentNode.childNodes, node)) + ']';
 			}
 
 			path.push(entry);

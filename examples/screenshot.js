@@ -19,7 +19,7 @@ if (typeof url !== 'string') {
 
 run = phantomas(url, {
 	'screenshot': true
-		//'screenshot': __dirname + '/screenshot.png'
+	//'screenshot': __dirname + '/screenshot.png'
 });
 
 // handle the promise
@@ -27,9 +27,9 @@ run.
 then(function(res) {
 	console.log('Done with exit code: %d', res.code);
 }).
-fail(function(code) {
-	console.log('Exit code #%d', code);
-	process.exit(code);
+fail(function(res) {
+	console.log('Exit code #%d', res.code);
+	process.exit(res.code);
 }).
 progress(function(progress) {
 	console.log('Loading progress: %d%', progress * 100);
